@@ -2,11 +2,12 @@ from collections.abc import Callable, Mapping
 from copy import deepcopy
 from functools import wraps
 from inspect import getcallargs
+from socket import socket
 from types import TracebackType
 from typing import Any, ParamSpec, Self, TypeVar
 
 import paramiko
-from socket import socket
+
 from sftpmock.server import SFTPServer, validate_content
 
 P = ParamSpec("P")

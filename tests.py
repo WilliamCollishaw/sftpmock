@@ -1,12 +1,11 @@
+import socket
 from contextlib import contextmanager
 from io import BytesIO, StringIO
-import socket
-from unittest import TestCase
+from unittest import TestCase, mock
 
 import paramiko
 
 from sftpmock import SFTPMock, with_sftpmock
-from unittest import mock
 
 
 @contextmanager
@@ -38,10 +37,14 @@ class SFTPMockerTest(TestCase):
         assert isinstance(Transport._fake_server_port, dict)
 
         assert "test.com" in Transport._fake_server_port, "Transport should have 'test.com' as _fake_server_port key"
-        assert "otherdomain.com" in Transport._fake_server_port, "Transport should have 'otherdomain.com' as _fake_server_port key"
+        assert "otherdomain.com" in Transport._fake_server_port, (
+            "Transport should have 'otherdomain.com' as _fake_server_port key"
+        )
 
         assert Transport._fake_server_port["test.com"] is not None, "Transport should have a port for 'test.com'"
-        assert Transport._fake_server_port["otherdomain.com"] is not None, "Transport should have a port for 'otherdomain.com'"
+        assert Transport._fake_server_port["otherdomain.com"] is not None, (
+            "Transport should have a port for 'otherdomain.com'"
+        )
 
         assert Transport._fake_server_port["test.com"] != Transport._fake_server_port[
             "otherdomain.com"], "Transport should have different ports for different hosts"
@@ -51,7 +54,7 @@ class SFTPMockerTest(TestCase):
     })
     def test_getfo_operation(self):
         '''
-        Test if SFTPClient.getfo works as expected 
+        Test if SFTPClient.getfo works as expected
         '''
         # Import needs to happen here because we need to use mocked Transport
         from paramiko import Transport
@@ -69,7 +72,7 @@ class SFTPMockerTest(TestCase):
     })
     def test_putfo_operation(self):
         '''
-        Test if Connection.putfo works as expected 
+        Test if Connection.putfo works as expected
         '''
         # Import needs to happen here because we need to use mocked Transport
         from paramiko import Transport
@@ -90,7 +93,7 @@ class SFTPMockerTest(TestCase):
     })
     def test_listdir_operation(self):
         '''
-        Test if Connection.putfo works as expected 
+        Test if Connection.putfo works as expected
         '''
         # Import needs to happen here because we need to use mocked Transport
         from paramiko import Transport
@@ -121,7 +124,7 @@ class SFTPMockerTest(TestCase):
     })
     def test_both_connections_work_independently(self):
         '''
-        Test if nested connections work correctly as two separate servers 
+        Test if nested connections work correctly as two separate servers
         '''
         # Import needs to happen here because we need to use mocked Transport
         from paramiko import Transport
@@ -183,7 +186,7 @@ class SFTPMockerTest(TestCase):
                 assert all(server.port for server in servers_context.host_servers.values(
                 )), "Servers should be started"
                 raise Exception("Some error")
-        except Exception as e:
+        except Exception:
             pass
 
         assert all(not server.is_alive() for server in servers_context.host_servers.values()), \
@@ -253,9 +256,9 @@ class SFTPMockerTest(TestCase):
 
         with mock.patch('socket.getaddrinfo') as mock_getaddrinfo:
             try:
-                with Transport("example.com:22") as transport:
+                with Transport("example.com:22"):
                     pass
-            except:
+            except Exception:
                 # This raises and exception because of the mocked getaddrinfo,
                 # but we only want to know if the connection was attempted, meaning it was not mocked
                 pass
