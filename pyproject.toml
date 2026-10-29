@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "sftpmock"
-version = "1.0.0"
+version = "2.0.0"
 authors = [{ name = "Bruno Werner" }]
 description = "Allows to mock SFTP servers' connection and contents for testing"
 readme = "README.md"
@@ -32,6 +32,7 @@ dependencies = [
 [project.urls]
 Homepage = "https://github.com/Doctor-God/sftpmock"
 Issues = "https://github.com/Doctor-God/sftpmock/issues"
+Changelog = "https://github.com/Doctor-God/sftpmock/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
