@@ -243,10 +243,10 @@ class SFTPMockerTest(TestCase):
     })
     def test_other_connections(self):
         '''
-        Test if a non-mocked server is unnafected by the decorator
+        Test if a non-mocked server is unaffected by the decorator
         '''
         # NOTE this test does an actual connection and tests if it fails, which it should
-        # This also means this test is slighly slower, due to timeout not being changeable in this case
+        # This also means this test is slightly slower, due to timeout not being changeable in this case
 
         # Import needs to happen here because we need to use mocked Transport
         from paramiko import Transport
@@ -481,6 +481,23 @@ class SFTPMockStateTest(TestCase):
 
         assert paramiko.Transport.__init__ is original_init
         assert not hasattr(paramiko.Transport, "_fake_server_port")
+
+    def test_reentering_active_mock_raises(self):
+        '''
+        Test if entering a mock that is already active raises, instead of corrupting its saved state
+        '''
+        mock = SFTPMock({"test.com": {}})
+        with mock:
+            with self.assertRaises(RuntimeError):
+                with mock:
+                    pass
+            assert "test.com" in paramiko.Transport._fake_server_port
+
+        assert not hasattr(paramiko.Transport, "_fake_server_port")
+
+        # It can be used again once it has exited
+        with mock:
+            assert "test.com" in paramiko.Transport._fake_server_port
 
     def test_decorator_without_contents(self):
         '''

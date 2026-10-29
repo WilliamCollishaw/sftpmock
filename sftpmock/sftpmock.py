@@ -1,20 +1,24 @@
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from functools import wraps
 from inspect import getcallargs
-from typing import Dict, Optional
+from types import TracebackType
+from typing import Any, ParamSpec, Self, TypeVar
 
 import paramiko
 from socket import socket
 from sftpmock.server import SFTPServer, validate_content
-from unittest.mock import MagicMock
+
+P = ParamSpec("P")
+R = TypeVar("R")
 
 
-def _validate_host_contents(host_contents: dict):
+def _validate_host_contents(host_contents: Mapping[str, Mapping[str, Any]]) -> None:
     for content in host_contents.values():
         validate_content(content)
 
 
-class SFTPMock(object):
+class SFTPMock:
     '''
     Act as a context to make local SFTP servers run for its duration
 
@@ -23,7 +27,7 @@ class SFTPMock(object):
 
     # TODO have ways to test authentication errors by saving provided fake credentials
 
-    def __init__(self, host_contents: dict):
+    def __init__(self, host_contents: Mapping[str, Mapping[str, Any]]) -> None:
         '''
         host_contents should be in the format:
         {
@@ -38,17 +42,21 @@ class SFTPMock(object):
 
         self.host_contents = host_contents
         # set when servers start on __enter__
-        self.host_servers: Dict[str, SFTPServer] = {}
+        self.host_servers: dict[str, SFTPServer] = {}
+        self._active = False
 
     @property
-    def contents(self) -> Dict[str, dict]:
+    def contents(self) -> dict[str, dict[str, Any]]:
         '''
         The files and folders on each mocked server, including any changes made while it ran
         '''
         return {host: server.content_provider.content_object for host, server in self.host_servers.items()}
 
-    def __enter__(self):
-        # We ignore original port, but there is a small likelyhoood of having two FTPs on the same hostname
+    def __enter__(self) -> Self:
+        if self._active:
+            raise RuntimeError("This SFTPMock is already active, nest a new SFTPMock instead")
+
+        # We ignore original port, but there is a small likelihood of having two FTPs on the same hostname
         self.host_servers = {}
         try:
             for host, content in self.host_contents.items():
@@ -107,10 +115,17 @@ class SFTPMock(object):
         self._previous_server_ports = vars(paramiko.Transport).get("_fake_server_port")
         paramiko.Transport.__init__ = _fake_transport_init
         paramiko.Transport._fake_server_port = {**(self._previous_server_ports or {}), **host_ports}
+        self._active = True
         return self
 
-    def __exit__(self, type, value, traceback):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
         self._stop_servers()
+        self._active = False
 
         # Restore Transport to its state before __enter__
         paramiko.Transport.__init__ = self._previous_init
@@ -119,15 +134,17 @@ class SFTPMock(object):
         else:
             paramiko.Transport._fake_server_port = self._previous_server_ports
 
-    def _stop_servers(self):
+    def _stop_servers(self) -> None:
         for server in self.host_servers.values():
             # This makes sure server is properly closed without leaving any sockets hanging
             server.stop()
 
 
-def with_sftpmock(host_contents: Optional[dict] = None):
+def with_sftpmock(
+    host_contents: Mapping[str, Mapping[str, Any]] | None = None,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
     '''
-    Decorator to makes the specified SFTP connections use a local, fake server
+    Decorator to make the specified SFTP connections use a local, fake server
 
     host_contents should be in the format:
         {
@@ -146,9 +163,9 @@ def with_sftpmock(host_contents: Optional[dict] = None):
     # Fail when decorating, rather than each time the decorated function runs
     _validate_host_contents(host_contents)
 
-    def decorator(func):
+    def decorator(func: Callable[P, R]) -> Callable[P, R]:
         @wraps(func)
-        def inner(*inner_args, **kwargs):
+        def inner(*inner_args: P.args, **kwargs: P.kwargs) -> R:
             # Create local servers and replace Transport.__init__ to force connections to them,
             # using a new SFTPMock per call so calls never share state
             with SFTPMock(host_contents):

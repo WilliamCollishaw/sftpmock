@@ -42,7 +42,7 @@ def _as_bytes(content):
     return content.encode("utf-8") if isinstance(content, str) else content
 
 
-class ContentProvider(object):
+class ContentProvider:
     '''
     Reads and writes the files and folders of a nested dict, by absolute path
     '''

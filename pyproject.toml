@@ -23,6 +23,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "Topic :: Software Development :: Testing",
   "Topic :: Software Development :: Testing :: Mocking",
+  "Typing :: Typed",
 ]
 dependencies = [
   "paramiko>=3.4.1",
