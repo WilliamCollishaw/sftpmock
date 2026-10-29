@@ -1,11 +1,17 @@
+from copy import deepcopy
 from functools import wraps
 from inspect import getcallargs
-from typing import Dict
+from typing import Dict, Optional
 
 import paramiko
 from socket import socket
 from sftpmock.server import SFTPServer, validate_content
 from unittest.mock import MagicMock
+
+
+def _validate_host_contents(host_contents: dict):
+    for content in host_contents.values():
+        validate_content(content)
 
 
 class SFTPMock(object):
@@ -28,33 +34,48 @@ class SFTPMock(object):
         }
         '''
 
-        for content in host_contents.values():
-            validate_content(content)
+        _validate_host_contents(host_contents)
 
         self.host_contents = host_contents
         # set when servers start on __enter__
         self.host_servers: Dict[str, SFTPServer] = {}
 
+    @property
+    def contents(self) -> Dict[str, dict]:
+        '''
+        The files and folders on each mocked server, including any changes made while it ran
+        '''
+        return {host: server.content_provider.content_object for host, server in self.host_servers.items()}
+
     def __enter__(self):
         # We ignore original port, but there is a small likelyhoood of having two FTPs on the same hostname
-        for host, content in self.host_contents.items():
-            # NOTE this opens a server on a Thread, in the future we might want to
-            # mock server further to make it more like HTTMock and use only python objects and functions internally
-            server = SFTPServer(content)
-            server.start()
-            self.host_servers[host] = server
+        self.host_servers = {}
+        try:
+            for host, content in self.host_contents.items():
+                # NOTE this opens a server on a Thread, in the future we might want to
+                # mock server further to make it more like HTTMock and use only python objects and functions internally
+                # Each server gets its own copy, so changes never reach host_contents or leak between runs
+                server = SFTPServer(deepcopy(content))
+                server.start()
+                self.host_servers[host] = server
+        except BaseException:
+            self._stop_servers()
+            raise
 
-        self._real_Transport__init__ = paramiko.Transport.__init__
+        host_ports = {host: server.port for host, server in self.host_servers.items()}
+
+        # When nested, the current __init__ is another SFTPMock's fake one, which we call through to,
+        # so hosts mocked by outer contexts keep working
+        previous_init = paramiko.Transport.__init__
+        real_init = getattr(previous_init, "_sftpmock_real_init", previous_init)
 
         def _fake_transport_init(*args, **kwargs):
             '''
-            This is meat to replace Transport.__init__ to always connect to localhost
-            on the fake servers we created
+            This is meant to replace Transport.__init__ to connect mocked hosts
+            to the fake servers we created on 127.0.0.1
             '''
             # Transform all arguments into kwargs, to allow us to replace some of them
-            kwargs = getcallargs(
-                self._real_Transport__init__, *args, **kwargs)
-            transport_self = kwargs.get("self")
+            kwargs = getcallargs(real_init, *args, **kwargs)
             sock = kwargs.pop("sock")
 
             # Extract real host and port from sock argument
@@ -73,29 +94,38 @@ class SFTPMock(object):
 
             # This keeps the connections our mock servers accept (which come from localhost)
             # and non-mocked connections unaffected
-            if (real_host not in ("localhost", "127.0.0.1")) and (real_host in transport_self._fake_server_port):
-                self._real_Transport__init__(
-                    sock=("localhost", transport_self._fake_server_port[real_host]), **kwargs)
+            if (real_host not in ("localhost", "127.0.0.1")) and (real_host in host_ports):
+                # 127.0.0.1 rather than localhost, which may resolve to ::1 first where the servers don't listen
+                previous_init(sock=("127.0.0.1", host_ports[real_host]), **kwargs)
             else:
-                self._real_Transport__init__(sock=sock, **kwargs)
+                previous_init(sock=sock, **kwargs)
 
-        # Make paramiko.Transport use our fake functions
+        _fake_transport_init._sftpmock_real_init = real_init
+
+        # Make paramiko.Transport use our fake functions, remembering what to restore on exit
+        self._previous_init = previous_init
+        self._previous_server_ports = vars(paramiko.Transport).get("_fake_server_port")
         paramiko.Transport.__init__ = _fake_transport_init
-        paramiko.Transport._fake_server_port = {
-            host: server.port for host, server in self.host_servers.items()}
+        paramiko.Transport._fake_server_port = {**(self._previous_server_ports or {}), **host_ports}
+        return self
 
     def __exit__(self, type, value, traceback):
-        # Stop servers
+        self._stop_servers()
+
+        # Restore Transport to its state before __enter__
+        paramiko.Transport.__init__ = self._previous_init
+        if self._previous_server_ports is None:
+            del paramiko.Transport._fake_server_port
+        else:
+            paramiko.Transport._fake_server_port = self._previous_server_ports
+
+    def _stop_servers(self):
         for server in self.host_servers.values():
             # This makes sure server is properly closed without leaving any sockets hanging
             server.stop()
 
-        # Restore Transport to its original state
-        paramiko.Transport.__init__ = self._real_Transport__init__
-        del paramiko.Transport._fake_server_port
 
-
-def with_sftpmock(host_contents: dict = {}):
+def with_sftpmock(host_contents: Optional[dict] = None):
     '''
     Decorator to makes the specified SFTP connections use a local, fake server
 
@@ -111,14 +141,17 @@ def with_sftpmock(host_contents: dict = {}):
         }
     '''
 
-    # Create a local, fake server
-    servers_context = SFTPMock(host_contents)
+    if host_contents is None:
+        host_contents = {}
+    # Fail when decorating, rather than each time the decorated function runs
+    _validate_host_contents(host_contents)
 
     def decorator(func):
         @wraps(func)
         def inner(*inner_args, **kwargs):
-            # Create a local server and replace Connection.__init__ to force connection to that server
-            with servers_context:
+            # Create local servers and replace Transport.__init__ to force connections to them,
+            # using a new SFTPMock per call so calls never share state
+            with SFTPMock(host_contents):
                 return func(*inner_args, **kwargs)
         return inner
     return decorator

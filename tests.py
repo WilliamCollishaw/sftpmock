@@ -9,6 +9,13 @@ from sftpmock import SFTPMock, with_sftpmock
 from unittest import mock
 
 
+@contextmanager
+def sftp_client(host="test.com"):
+    with paramiko.Transport((host, 22)) as transport:
+        transport.connect(None, "user", "pass")
+        yield paramiko.SFTPClient.from_transport(transport)
+
+
 class SFTPMockerTest(TestCase):
     '''
     This tests core functionality of the "with_sftpmock" decorator
@@ -196,7 +203,7 @@ class SFTPMockerTest(TestCase):
         from paramiko import Transport
 
         with Transport("test.com:22") as transport:
-            assert transport.hostname == "localhost"
+            assert transport.hostname == "127.0.0.1"
 
     @with_sftpmock({
         "test.com": {},
@@ -209,7 +216,7 @@ class SFTPMockerTest(TestCase):
         from paramiko import Transport
 
         with Transport(("test.com", 22)) as transport:
-            assert transport.hostname == "localhost"
+            assert transport.hostname == "127.0.0.1"
 
     @with_sftpmock({
         "test.com": {},
@@ -229,7 +236,7 @@ class SFTPMockerTest(TestCase):
         serversocket.connect(("test.com", 22))
 
         with Transport(serversocket) as transport:
-            assert transport.hostname == "localhost"
+            assert transport.hostname == "127.0.0.1"
 
     @with_sftpmock({
         "test.com": {},
@@ -261,12 +268,6 @@ class SFTPServerBehaviourTest(TestCase):
     This tests how the mocked SFTP servers handle files and folders
     '''
 
-    @contextmanager
-    def sftp_client(self, host="test.com"):
-        with paramiko.Transport((host, 22)) as transport:
-            transport.connect(None, "user", "pass")
-            yield paramiko.SFTPClient.from_transport(transport)
-
     @with_sftpmock({
         "test.com": {"a_folder": {"file.txt": "some longer text"}},
     })
@@ -274,7 +275,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if writing a shorter file over an existing one replaces its content
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             client.putfo(BytesIO(b"short"), "/a_folder/file.txt")
 
             outfile = BytesIO()
@@ -288,7 +289,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if opening with exclusive create fails for existing files and works for new ones
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             with self.assertRaises(OSError):
                 client.open("/a_folder/file.txt", "wx")
 
@@ -303,7 +304,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if str content is served as UTF-8, with sizes counted in bytes
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             assert client.stat("/a_folder/file.txt").st_size == len("café ✓".encode())
 
             outfile = BytesIO()
@@ -317,7 +318,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if bytes content is served as is
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             outfile = BytesIO()
             client.getfo("/a_folder/file.bin", outfile)
             assert outfile.getvalue() == b"\x00\x01\xff"
@@ -329,7 +330,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if opening, listing or stat-ing a path that does not exist raises FileNotFoundError
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             with self.assertRaises(FileNotFoundError):
                 client.open("/a_folder/missing.txt")
             with self.assertRaises(FileNotFoundError):
@@ -344,7 +345,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if lstat works like stat, as there are no symlinks
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             assert client.lstat("/a_folder/file.txt").st_size == len("some text")
 
     @with_sftpmock({
@@ -354,7 +355,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if folders can be created and removed, and that only empty folders can be removed
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             client.mkdir("/new_folder")
             assert sorted(client.listdir("/")) == ["a_folder", "new_folder"]
 
@@ -372,7 +373,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if files can be removed, but folders can not
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             with self.assertRaises(OSError):
                 client.remove("/a_folder")
             assert client.listdir("/") == ["a_folder"]
@@ -387,7 +388,7 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         Test if rename moves files, refuses to overwrite, and posix_rename overwrites
         '''
-        with self.sftp_client() as client:
+        with sftp_client() as client:
             client.rename("/a_folder/file.txt", "/a_folder/renamed.txt")
             assert sorted(client.listdir("/a_folder")) == ["empty.txt", "other.txt", "renamed.txt"]
 
@@ -408,3 +409,92 @@ class SFTPServerBehaviourTest(TestCase):
         '''
         with self.assertRaises(TypeError):
             SFTPMock({"test.com": {"a_folder": {"file.txt": 123}}})
+
+
+class SFTPMockStateTest(TestCase):
+    '''
+    This tests that mocks don't share or leak state
+    '''
+
+    def test_decorated_calls_do_not_share_state(self):
+        '''
+        Test if each call of a decorated function starts from the original content
+        '''
+        @with_sftpmock({"test.com": {"a_folder": {}}})
+        def upload():
+            with sftp_client() as client:
+                before = client.listdir("/a_folder")
+                client.putfo(BytesIO(b"some text"), "/a_folder/new.txt")
+                return before
+
+        assert upload() == []
+        assert upload() == [], "Second call should not see the file uploaded by the first call"
+
+    def test_contents_are_not_modified(self):
+        '''
+        Test if uploads don't change the dict passed in, by the decorator or the context manager
+        '''
+        contents = {"test.com": {"a_folder": {"file.txt": "some text"}}}
+
+        @with_sftpmock(contents)
+        def upload():
+            with sftp_client() as client:
+                client.putfo(BytesIO(b"other text"), "/a_folder/file.txt")
+                client.putfo(BytesIO(b"new text"), "/a_folder/new.txt")
+
+        upload()
+        with SFTPMock(contents):
+            upload.__wrapped__()
+
+        assert contents == {"test.com": {"a_folder": {"file.txt": "some text"}}}
+
+    def test_contents_exposed_on_mock(self):
+        '''
+        Test if the context manager returns the mock, which exposes the server contents
+        '''
+        with SFTPMock({"test.com": {"a_folder": {}}}) as mock:
+            with sftp_client() as client:
+                client.putfo(BytesIO(b"some text"), "/a_folder/new.txt")
+
+            assert mock.contents["test.com"]["a_folder"]["new.txt"] == b"some text"
+
+        # Still readable after the servers stop
+        assert mock.contents["test.com"]["a_folder"]["new.txt"] == b"some text"
+
+    def test_nested_mocks(self):
+        '''
+        Test if nested mocks work together, and each exit restores the state before its enter
+        '''
+        original_init = paramiko.Transport.__init__
+
+        with SFTPMock({"test.com": {"outer.txt": "outer"}}):
+            with SFTPMock({"otherdomain.com": {"inner.txt": "inner"}}):
+                with sftp_client("test.com") as client:
+                    assert client.listdir("/") == ["outer.txt"]
+                with sftp_client("otherdomain.com") as client:
+                    assert client.listdir("/") == ["inner.txt"]
+                assert set(paramiko.Transport._fake_server_port) == {"test.com", "otherdomain.com"}
+
+            with sftp_client("test.com") as client:
+                assert client.listdir("/") == ["outer.txt"]
+            assert set(paramiko.Transport._fake_server_port) == {"test.com"}
+
+        assert paramiko.Transport.__init__ is original_init
+        assert not hasattr(paramiko.Transport, "_fake_server_port")
+
+    def test_decorator_without_contents(self):
+        '''
+        Test if the decorator works without any contents
+        '''
+        @with_sftpmock()
+        def decorated():
+            return paramiko.Transport._fake_server_port
+
+        assert decorated() == {}
+
+    def test_unsupported_content_raises_when_decorating(self):
+        '''
+        Test if unsupported content is rejected when decorating, not when the test runs
+        '''
+        with self.assertRaises(TypeError):
+            with_sftpmock({"test.com": {"file.txt": 123}})

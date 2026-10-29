@@ -84,6 +84,20 @@ def test_function():
     # Do your asserts here
 ```
 
+### Checking uploaded files
+Each server works on a copy of the contents you pass in, so your dict is never changed and every run starts from the
+same files. To check what your code uploaded, use the context manager and read `contents` from the returned mock.
+
+```python
+def test_function():
+    with SFTPMock({"test.com": {"a_folder": {}}}) as mock:
+        upload_report()  # your code that uploads /a_folder/report.csv
+
+        assert "report.csv" in mock.contents["test.com"]["a_folder"]
+```
+
+Uploaded files are stored as `bytes`.
+
 ### Using a socket
 If you use Python sockets, you may run into errors when the socket still tries to connect to the real server, even though sftpmock ignores that connection.
 
@@ -110,7 +124,7 @@ def test_function(self, mock_socket):
 ```
 
 ## Known Issues / Limitations
-- Trying to test transport.sock hostname and ports may result in errors, as they are replaced by localhost and a random local port
+- Trying to test transport.sock hostname and ports may result in errors, as they are replaced by 127.0.0.1 and a random local port
 - SSHClient may be replaced by a local server, as it also uses paramiko.Transport (need to test this still)
 - If you are using sockets to init a Transport, you may need to mock them first
 - If the SFTP servers being tested are actually localhost, this won't work
