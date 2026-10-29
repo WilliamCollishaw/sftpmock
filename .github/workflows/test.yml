@@ -6,9 +6,12 @@ name: Tests
 on:
   push:
     branches: [ "main" ]
-  pull_request_target:
+  pull_request:
     branches: [ "main" ]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
