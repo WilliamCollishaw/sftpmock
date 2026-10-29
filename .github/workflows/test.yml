@@ -1,5 +1,4 @@
-# This workflow will install Python dependencies, run tests and lint with a variety of Python versions,
-# and check that the package builds
+# This workflow lints and tests the package on each supported Python version, and checks that it builds
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
 
 name: Tests

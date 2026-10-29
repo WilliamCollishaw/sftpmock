@@ -18,7 +18,7 @@ def sftp_client(host="test.com"):
 
 class SFTPMockerTest(TestCase):
     """
-    This tests core functionality of the "with_sftpmock" decorator
+    This tests the core functionality of the with_sftpmock decorator
     """
 
     @with_sftpmock(
@@ -29,7 +29,7 @@ class SFTPMockerTest(TestCase):
     )
     def test_fake_server_port_set_correctly(self):
         """
-        Tests if Connection was mocked to include the hostname -> port attribute (_fake_server_port)
+        Test if Transport was mocked to include the hostname -> port attribute (_fake_server_port)
         """
         assert hasattr(Transport, "_fake_server_port"), "Transport class should have mocked _fake_server_port attribute"
 
@@ -134,9 +134,9 @@ class SFTPMockerTest(TestCase):
             transport.connect(None, "user", "pass")
             assert paramiko.SFTPClient.from_transport(transport).listdir("/a_folder") == ["file.txt"]
 
-    def test_servers_are_shutdown_normally(self):
+    def test_servers_are_shut_down_normally(self):
         """
-        Test if servers are shutdown when execution ends normally.
+        Test if servers are shut down when execution ends normally
 
         We test SFTPMock directly because we need to check its variables
         """
@@ -160,9 +160,9 @@ class SFTPMockerTest(TestCase):
             "All sockets should be closed"
         )
 
-    def test_servers_are_shutdown_exception(self):
+    def test_servers_are_shut_down_on_exception(self):
         """
-        Test if servers are shutdown when an exception is raised
+        Test if servers are shut down when an exception is raised
 
         We test SFTPMock directly because we need to check its variables
         """
@@ -381,7 +381,7 @@ class SFTPServerBehaviourTest(TestCase):
     )
     def test_remove(self):
         """
-        Test if files can be removed, but folders can not
+        Test if files can be removed, but folders cannot
         """
         with sftp_client() as client:
             with self.assertRaises(OSError):

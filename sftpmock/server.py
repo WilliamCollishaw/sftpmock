@@ -268,7 +268,7 @@ class _SFTPRequestHandler(socketserver.BaseRequestHandler):
 
 class SFTPServer(socketserver.ThreadingTCPServer):
     """
-    Serves content_object over SFTP on a random localhost port, from a background thread
+    Serves content_object over SFTP on a random port on 127.0.0.1, from a background thread
     """
 
     daemon_threads = True

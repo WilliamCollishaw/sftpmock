@@ -6,7 +6,7 @@ build-backend = "uv_build"
 name = "sftpmock"
 version = "2.0.0"
 authors = [{ name = "Bruno Werner" }]
-description = "Allows to mock SFTP servers' connection and contents for testing"
+description = "Mock SFTP server connections and contents for testing"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

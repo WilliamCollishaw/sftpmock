@@ -1,5 +1,5 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
-![Tests](https://github.com/Doctor-God/sftpmock/actions/workflows/test.yml/badge.svg?branch=main) 
+![Tests](https://github.com/Doctor-God/sftpmock/actions/workflows/test.yml/badge.svg?branch=main)
 [![Python versions](https://img.shields.io/pypi/pyversions/sftpmock)](https://pypi.org/project/sftpmock/)
 
 # sftpmock
@@ -9,12 +9,12 @@ on said server.
 
 We do this by locally modifying `paramiko.Transport.__init__` to redirect real server addresses to internal mocked servers.
 
-This was inspired by [**httmock**](https://github.com/patrys/httmock)'s implementation, check them out!
+This was inspired by [**httmock**](https://github.com/patrys/httmock)'s implementation. Check them out!
 
 The mocked SFTP servers are based on the design of [**pytest-sftpserver**](https://github.com/ulope/pytest-sftpserver).
 
 ## Installation
-```
+```sh
 pip install sftpmock
 ```
 
@@ -23,7 +23,7 @@ sftpmock requires Python 3.11 or newer and paramiko 3.4.1 or newer, which is ins
 ## How to use
 
 ### Applying the mock
-You can use sftpmock both as a decorator, or as a context manager, like so:
+You can use sftpmock either as a decorator or as a context manager, like so:
 ```python
 from sftpmock import SFTPMock, with_sftpmock
 
@@ -39,7 +39,7 @@ def test_function():
 ```
 
 ### Servers
-On both of the methods, sftpmock expects a `host_contents` input dict. This dictionary follows this syntax:
+With either method, sftpmock expects a `host_contents` input dict. This dictionary follows this syntax:
 ```python
 {
     "mockedserver.com": {
@@ -69,8 +69,8 @@ def test_function():
     # Do your asserts here
 ```
 
-### Calling paramiko.Transport on test function
-`paramiko.Transport` can be imported as usual, the mock applies to it wherever it was imported. The mocked servers
+### Calling `paramiko.Transport` in a test function
+`paramiko.Transport` can be imported as usual: the mock applies to it wherever it was imported. The mocked servers
 accept any credentials.
 ```python
 from paramiko import SFTPClient, Transport
@@ -87,7 +87,7 @@ def test_function():
 ```
 
 ### Mocking multiple servers
-If you need to mock more than one server, simply include it on the input dict.
+If you need to mock more than one server, simply add it to the input dict.
 
 ```python
 @with_sftpmock({
@@ -113,9 +113,9 @@ def test_function():
 Uploaded files are stored as `bytes`.
 
 ### Using a socket
-If you use Python sockets, you may run into errors when the socket still tries to connect to the real server, even though sftpmock ignores that connection.
+If you pass a socket to `Transport`, you may run into errors because the socket still tries to connect to the real server, even though sftpmock ignores that connection.
 
-One way to circumvent that is by using `unittest.mock` to prevent that initial socket connection. From there, sftpmock works as expected.
+One way around this is to use `unittest.mock` to prevent that initial socket connection. From there, sftpmock works as expected.
 
 ```python
 import socket
@@ -126,7 +126,7 @@ from paramiko import Transport
 @with_sftpmock({
     "test.com": {"a_folder": {"test.txt": "some text"}},
 })
-@mock.patch('socket.socket', spec=socket.socket)
+@mock.patch("socket.socket", spec=socket.socket)
 def test_function(mock_socket):
     mock_socket.return_value.getsockname.return_value = ("test.com", 22)
 
@@ -139,11 +139,11 @@ def test_function(mock_socket):
 ```
 
 ## Known Issues / Limitations
-- Trying to test transport.sock hostname and ports may result in errors, as they are replaced by 127.0.0.1 and a random local port
+- Checking the host and port in `transport.sock` may fail, as they are replaced by `127.0.0.1` and a random local port
 - `paramiko.SSHClient` is not mocked, as it connects to the real host itself before creating a `Transport`. Use `paramiko.Transport` directly instead
-- If you are using sockets to init a Transport, you may need to mock them first
-- If the SFTP servers being tested are actually localhost, this won't work
-- The port is ignored, all connections to a mocked hostname reach the same server
+- If you are passing a socket to `Transport`, you may need to mock it first
+- Servers on `localhost` or `127.0.0.1` can't be mocked
+- The port is ignored: all connections to a mocked hostname reach the same server
 - Any credentials are accepted, so authentication failures can't be tested
 
 ## Future improvements
