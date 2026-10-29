@@ -11,6 +11,8 @@ We do this by locally modifying ```paramiko.Transport.__init__``` to redirect re
 
 This was inspired by [**httmock**](https://github.com/patrys/httmock)'s implementation, check them out!
 
+The mocked SFTP servers are based on the design of [**pytest-sftpserver**](https://github.com/ulope/pytest-sftpserver).
+
 ## How to use
 
 ### Applying the mock
@@ -114,6 +116,5 @@ def test_function(self, mock_socket):
 - If the SFTP servers being tested are actually localhost, this won't work
 
 ## Future improvements
-- Not depend on pytest-sftpserver package
 - Allow for server port differentiation
 - Avoid affecting SSHClient

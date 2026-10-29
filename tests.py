@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from io import BytesIO, StringIO
 import socket
 from unittest import TestCase
@@ -253,3 +254,157 @@ class SFTPMockerTest(TestCase):
                 pass
             mock_getaddrinfo.assert_called_once_with(
                 "example.com", 22, socket.AF_UNSPEC, socket.SOCK_STREAM)
+
+
+class SFTPServerBehaviourTest(TestCase):
+    '''
+    This tests how the mocked SFTP servers handle files and folders
+    '''
+
+    @contextmanager
+    def sftp_client(self, host="test.com"):
+        with paramiko.Transport((host, 22)) as transport:
+            transport.connect(None, "user", "pass")
+            yield paramiko.SFTPClient.from_transport(transport)
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "some longer text"}},
+    })
+    def test_overwrite_truncates_file(self):
+        '''
+        Test if writing a shorter file over an existing one replaces its content
+        '''
+        with self.sftp_client() as client:
+            client.putfo(BytesIO(b"short"), "/a_folder/file.txt")
+
+            outfile = BytesIO()
+            client.getfo("/a_folder/file.txt", outfile)
+            assert outfile.getvalue() == b"short", f"Expected b'short', found {outfile.getvalue()}"
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "some text"}},
+    })
+    def test_exclusive_create(self):
+        '''
+        Test if opening with exclusive create fails for existing files and works for new ones
+        '''
+        with self.sftp_client() as client:
+            with self.assertRaises(OSError):
+                client.open("/a_folder/file.txt", "wx")
+
+            with client.open("/a_folder/new.txt", "wx") as f:
+                f.write(b"new text")
+            assert sorted(client.listdir("/a_folder")) == ["file.txt", "new.txt"]
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "café ✓"}},
+    })
+    def test_non_ascii_text_content(self):
+        '''
+        Test if str content is served as UTF-8, with sizes counted in bytes
+        '''
+        with self.sftp_client() as client:
+            assert client.stat("/a_folder/file.txt").st_size == len("café ✓".encode())
+
+            outfile = BytesIO()
+            client.getfo("/a_folder/file.txt", outfile)
+            assert outfile.getvalue().decode("utf-8") == "café ✓"
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.bin": b"\x00\x01\xff"}},
+    })
+    def test_bytes_content(self):
+        '''
+        Test if bytes content is served as is
+        '''
+        with self.sftp_client() as client:
+            outfile = BytesIO()
+            client.getfo("/a_folder/file.bin", outfile)
+            assert outfile.getvalue() == b"\x00\x01\xff"
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "some text"}},
+    })
+    def test_missing_paths_raise(self):
+        '''
+        Test if opening, listing or stat-ing a path that does not exist raises FileNotFoundError
+        '''
+        with self.sftp_client() as client:
+            with self.assertRaises(FileNotFoundError):
+                client.open("/a_folder/missing.txt")
+            with self.assertRaises(FileNotFoundError):
+                client.listdir("/missing_folder")
+            with self.assertRaises(FileNotFoundError):
+                client.stat("/a_folder/missing.txt")
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "some text"}},
+    })
+    def test_lstat(self):
+        '''
+        Test if lstat works like stat, as there are no symlinks
+        '''
+        with self.sftp_client() as client:
+            assert client.lstat("/a_folder/file.txt").st_size == len("some text")
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "some text"}},
+    })
+    def test_mkdir_and_rmdir(self):
+        '''
+        Test if folders can be created and removed, and that only empty folders can be removed
+        '''
+        with self.sftp_client() as client:
+            client.mkdir("/new_folder")
+            assert sorted(client.listdir("/")) == ["a_folder", "new_folder"]
+
+            client.rmdir("/new_folder")
+            assert client.listdir("/") == ["a_folder"]
+
+            with self.assertRaises(OSError):
+                client.rmdir("/a_folder")
+            assert client.listdir("/a_folder") == ["file.txt"]
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "some text"}},
+    })
+    def test_remove(self):
+        '''
+        Test if files can be removed, but folders can not
+        '''
+        with self.sftp_client() as client:
+            with self.assertRaises(OSError):
+                client.remove("/a_folder")
+            assert client.listdir("/") == ["a_folder"]
+
+            client.remove("/a_folder/file.txt")
+            assert client.listdir("/a_folder") == []
+
+    @with_sftpmock({
+        "test.com": {"a_folder": {"file.txt": "some text", "other.txt": "other text", "empty.txt": ""}},
+    })
+    def test_rename(self):
+        '''
+        Test if rename moves files, refuses to overwrite, and posix_rename overwrites
+        '''
+        with self.sftp_client() as client:
+            client.rename("/a_folder/file.txt", "/a_folder/renamed.txt")
+            assert sorted(client.listdir("/a_folder")) == ["empty.txt", "other.txt", "renamed.txt"]
+
+            client.rename("/a_folder/empty.txt", "/a_folder/still_empty.txt")
+            assert sorted(client.listdir("/a_folder")) == ["other.txt", "renamed.txt", "still_empty.txt"]
+
+            with self.assertRaises(OSError):
+                client.rename("/a_folder/renamed.txt", "/a_folder/other.txt")
+
+            client.posix_rename("/a_folder/renamed.txt", "/a_folder/other.txt")
+            outfile = BytesIO()
+            client.getfo("/a_folder/other.txt", outfile)
+            assert outfile.getvalue() == b"some text"
+
+    def test_unsupported_content_raises(self):
+        '''
+        Test if content that is not a dict, str or bytes is rejected up front
+        '''
+        with self.assertRaises(TypeError):
+            SFTPMock({"test.com": {"a_folder": {"file.txt": 123}}})

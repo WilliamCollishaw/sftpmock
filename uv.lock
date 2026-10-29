@@ -410,25 +410,11 @@ wheels = [
 ]
 
 [[package]]
-name = "pytest-sftpserver"
-version = "1.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "paramiko" },
-    { name = "six" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/05/45/f0c545cf1bee1556fed7fb3e7eea77a4691255939522b1d677ecb2c04be8/pytest-sftpserver-1.3.0.tar.gz", hash = "sha256:b7ac34a23f63d77e27f67b6a81c9418243733f027eeb8a3061d965b2da7e5cab", size = 12563, upload-time = "2019-09-16T16:07:14.61Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5c/07/a66ce67849514133361887636e0ca187e894bca241686adedd414a06cb50/pytest_sftpserver-1.3.0-py2.py3-none-any.whl", hash = "sha256:c5e8a37049866d4eabc711db9f1c09e1c02ab72ba290f5fd244939c9a188042f", size = 18347, upload-time = "2019-09-16T16:07:11.458Z" },
-]
-
-[[package]]
 name = "sftpmock"
 version = "1.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "paramiko" },
-    { name = "pytest-sftpserver" },
 ]
 
 [package.dev-dependencies]
@@ -438,22 +424,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "paramiko", specifier = ">=3.4.1" },
-    { name = "pytest-sftpserver", specifier = ">=1.3.0" },
-]
+requires-dist = [{ name = "paramiko", specifier = ">=3.4.1" }]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "flake8" },
     { name = "pytest" },
-]
-
-[[package]]
-name = "six"
-version = "1.17.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/94/e7/b2c673351809dca68a0e064b6af791aa332cf192da575fd474ed7d6f16a2/six-1.17.0.tar.gz", hash = "sha256:ff70335d468e7eb6ec65b95b99d3a2836546063f63acc5171de367e834932a81", size = 34031, upload-time = "2024-12-04T17:35:28.174Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b7/ce/149a00dd41f10bc29e5921b496af8b574d8413afcd5e30dfa0ed46c2cc5e/six-1.17.0-py2.py3-none-any.whl", hash = "sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274", size = 11050, upload-time = "2024-12-04T17:35:26.475Z" },
 ]

@@ -2,11 +2,9 @@ from functools import wraps
 from inspect import getcallargs
 from typing import Dict
 
-  # TODO switch out to use paramiko directly
-from pytest_sftpserver.sftp.server import SFTPServer
 import paramiko
 from socket import socket
-from sftpmock.server import FixedContentProvider
+from sftpmock.server import SFTPServer, validate_content
 from unittest.mock import MagicMock
 
 
@@ -30,6 +28,9 @@ class SFTPMock(object):
         }
         '''
 
+        for content in host_contents.values():
+            validate_content(content)
+
         self.host_contents = host_contents
         # set when servers start on __enter__
         self.host_servers: Dict[str, SFTPServer] = {}
@@ -39,8 +40,7 @@ class SFTPMock(object):
         for host, content in self.host_contents.items():
             # NOTE this opens a server on a Thread, in the future we might want to
             # mock server further to make it more like HTTMock and use only python objects and functions internally
-            server = SFTPServer(
-                content, content_provider_class=FixedContentProvider)
+            server = SFTPServer(content)
             server.start()
             self.host_servers[host] = server
 
@@ -71,8 +71,8 @@ class SFTPMock(object):
                 raise ValueError(
                     "sock argument must be a socket, a tuple or a string")
 
-            # This prevents paramiko usage on pytest_sftpserver from breaking
-            # and makes non-mocked connections be unnafected
+            # This keeps the connections our mock servers accept (which come from localhost)
+            # and non-mocked connections unaffected
             if (real_host not in ("localhost", "127.0.0.1")) and (real_host in transport_self._fake_server_port):
                 self._real_Transport__init__(
                     sock=("localhost", transport_self._fake_server_port[real_host]), **kwargs)
@@ -88,9 +88,7 @@ class SFTPMock(object):
         # Stop servers
         for server in self.host_servers.values():
             # This makes sure server is properly closed without leaving any sockets hanging
-            server.shutdown()
-            server.server_close()
-            server.join()
+            server.stop()
 
         # Restore Transport to its original state
         paramiko.Transport.__init__ = self._real_Transport__init__
