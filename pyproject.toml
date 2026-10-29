@@ -39,8 +39,13 @@ dev = [
   "ruff",
 ]
 
+[tool.pytest]
+testpaths = ["tests"]
+filterwarnings = ["error"]
+
 [tool.uv.build-backend]
 module-root = ""
+source-include = ["tests/**"]
 
 [tool.ruff]
 line-length = 120

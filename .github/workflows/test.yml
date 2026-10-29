@@ -42,8 +42,7 @@ jobs:
     - name: Check formatting with ruff
       run: uv run ruff format --check
     - name: Test with pytest
-      run: |
-        uv run python -m unittest tests
+      run: uv run pytest
 
   build:
     name: Build package
