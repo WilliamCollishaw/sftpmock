@@ -1,9 +1,9 @@
-'''
+"""
 A minimal in-memory SFTP server, serving a nested dict where folders are dicts
 and files are str or bytes.
 
 Based on the design of pytest-sftpserver (https://github.com/ulope/pytest-sftpserver, MIT License).
-'''
+"""
 
 import functools
 import logging
@@ -22,16 +22,17 @@ logging.getLogger(__name__).addHandler(logging.NullHandler())
 
 
 def validate_content(content, path="/"):
-    '''
+    """
     Raise TypeError if content contains anything other than dicts (folders) and str or bytes (files)
-    '''
+    """
     if isinstance(content, dict):
         for name, child in content.items():
             validate_content(child, posixpath.join(path, str(name)))
     elif not isinstance(content, (str, bytes)):
         raise TypeError(
             f"Unsupported content at {path!r}: expected a dict (folder) or str/bytes (file), "
-            f"got {type(content).__name__}")
+            f"got {type(content).__name__}"
+        )
 
 
 def _normalize(path):
@@ -43,9 +44,9 @@ def _as_bytes(content):
 
 
 class ContentProvider:
-    '''
+    """
     Reads and writes the files and folders of a nested dict, by absolute path
-    '''
+    """
 
     def __init__(self, content_object=None):
         self.content_object = {} if content_object is None else content_object
@@ -108,7 +109,7 @@ class _SFTPHandle(paramiko.SFTPHandle):
             return SFTP_NO_SUCH_FILE
         if isinstance(content, dict):
             return SFTP_FAILURE
-        return _as_bytes(content)[offset:offset + length]
+        return _as_bytes(content)[offset : offset + length]
 
     def write(self, offset, data):
         content = self.content_provider.get(self.path)
@@ -117,7 +118,7 @@ class _SFTPHandle(paramiko.SFTPHandle):
         content = b"" if content is None else _as_bytes(content)
         if offset > len(content):
             content += b"\x00" * (offset - len(content))
-        content = content[:offset] + data + content[offset + len(data):]
+        content = content[:offset] + data + content[offset + len(data) :]
         return SFTP_OK if self.content_provider.put(self.path, content) else SFTP_NO_SUCH_FILE
 
     def stat(self):
@@ -217,9 +218,9 @@ class _SFTPServerInterface(paramiko.SFTPServerInterface):
 
 
 class _AllowAllServer(paramiko.ServerInterface):
-    '''
+    """
     Accepts any credentials
-    '''
+    """
 
     def get_allowed_auths(self, username):
         return "none,password,publickey"
@@ -251,8 +252,8 @@ class _SFTPRequestHandler(socketserver.BaseRequestHandler):
         try:
             transport.add_server_key(_host_key())
             transport.set_subsystem_handler(
-                "sftp", paramiko.SFTPServer, _SFTPServerInterface,
-                content_provider=self.server.content_provider)
+                "sftp", paramiko.SFTPServer, _SFTPServerInterface, content_provider=self.server.content_provider
+            )
             try:
                 transport.start_server(server=_AllowAllServer())
             except (paramiko.SSHException, EOFError, OSError):
@@ -266,9 +267,9 @@ class _SFTPRequestHandler(socketserver.BaseRequestHandler):
 
 
 class SFTPServer(socketserver.ThreadingTCPServer):
-    '''
+    """
     Serves content_object over SFTP on a random localhost port, from a background thread
-    '''
+    """
 
     daemon_threads = True
 
@@ -276,8 +277,7 @@ class SFTPServer(socketserver.ThreadingTCPServer):
         super().__init__(("127.0.0.1", 0), _SFTPRequestHandler)
         self.content_provider = ContentProvider(content_object)
         self._transports = set()
-        self._thread = threading.Thread(
-            target=self.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
+        self._thread = threading.Thread(target=self.serve_forever, kwargs={"poll_interval": 0.01}, daemon=True)
 
     @property
     def port(self):
@@ -290,9 +290,9 @@ class SFTPServer(socketserver.ThreadingTCPServer):
         return self._thread.is_alive()
 
     def stop(self):
-        '''
+        """
         Stop serving, close all connections and wait for the server thread to finish
-        '''
+        """
         if self._thread.is_alive():
             self.shutdown()
         self.server_close()

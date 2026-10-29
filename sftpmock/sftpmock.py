@@ -20,16 +20,16 @@ def _validate_host_contents(host_contents: Mapping[str, Mapping[str, Any]]) -> N
 
 
 class SFTPMock:
-    '''
+    """
     Act as a context to make local SFTP servers run for its duration
 
     Inspired by httmock's implementation
-    '''
+    """
 
     # TODO have ways to test authentication errors by saving provided fake credentials
 
     def __init__(self, host_contents: Mapping[str, Mapping[str, Any]]) -> None:
-        '''
+        """
         host_contents should be in the format:
         {
             "hostname": {
@@ -37,7 +37,7 @@ class SFTPMock:
                 "path2": "content2",
             }
         }
-        '''
+        """
 
         _validate_host_contents(host_contents)
 
@@ -48,9 +48,9 @@ class SFTPMock:
 
     @property
     def contents(self) -> dict[str, dict[str, Any]]:
-        '''
+        """
         The files and folders on each mocked server, including any changes made while it ran
-        '''
+        """
         return {host: server.content_provider.content_object for host, server in self.host_servers.items()}
 
     def __enter__(self) -> Self:
@@ -79,10 +79,10 @@ class SFTPMock:
         real_init = getattr(previous_init, "_sftpmock_real_init", previous_init)
 
         def _fake_transport_init(*args, **kwargs):
-            '''
+            """
             This is meant to replace Transport.__init__ to connect mocked hosts
             to the fake servers we created on 127.0.0.1
-            '''
+            """
             # Transform all arguments into kwargs, to allow us to replace some of them
             kwargs = getcallargs(real_init, *args, **kwargs)
             sock = kwargs.pop("sock")
@@ -98,8 +98,7 @@ class SFTPMock:
             elif isinstance(sock, str):
                 real_host, real_port = sock.split(":")
             else:
-                raise ValueError(
-                    "sock argument must be a socket, a tuple or a string")
+                raise ValueError("sock argument must be a socket, a tuple or a string")
 
             # This keeps the connections our mock servers accept (which come from localhost)
             # and non-mocked connections unaffected
@@ -144,7 +143,7 @@ class SFTPMock:
 def with_sftpmock(
     host_contents: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    '''
+    """
     Decorator to make the specified SFTP connections use a local, fake server
 
     host_contents should be in the format:
@@ -157,7 +156,7 @@ def with_sftpmock(
                 }
             }
         }
-    '''
+    """
 
     if host_contents is None:
         host_contents = {}
@@ -171,5 +170,7 @@ def with_sftpmock(
             # using a new SFTPMock per call so calls never share state
             with SFTPMock(host_contents):
                 return func(*inner_args, **kwargs)
+
         return inner
+
     return decorator
