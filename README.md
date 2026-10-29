@@ -1,5 +1,6 @@
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 ![Tests](https://github.com/Doctor-God/sftpmock/actions/workflows/test.yml/badge.svg?branch=main) 
+[![Python versions](https://img.shields.io/pypi/pyversions/sftpmock)](https://pypi.org/project/sftpmock/)
 
 # sftpmock
 Allows you to test behavior that relies on external SFTP servers to function. This means you can "replace" the
